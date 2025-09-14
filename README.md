@@ -2,148 +2,192 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-This repository provides online (streaming, one-sample updates) and batch variants
-of Kernel Supervised Dimensionality Reduction (KSDR) using Random Fourier Features (RFF).
-Linear kernel is now a strict identity (no random projection, no sigma search). A minimal
-kernel selector optionally chooses between 'linear' and 'rbf' via a lightweight correlation heuristic.
+Online + streaming (single-sample) and batch variants of Kernel Supervised Dimensionality Reduction (KSDR) using Random Fourier Features (RFF). Linear kernel is a strict identity (no random projection, no sigma search). A minimal kernel selector can choose between `linear` and `rbf` via lightweight correlation heuristics.
 
-* `OnlineKernelSDR` (formerly `RealtimeOnlineKSPCA`): single-sample streaming updates with adaptive learning rate / optional advanced adaptation, forgetting factor, optional whitening, stability guards.
-* `BatchKSPCA`: batch reference implementation (RFF approximation).
-* `data_gens/`: nonlinear synthetic generators for benchmarking and visualization.
-* `kin8nm_experiment.py`: nested CV experiment on the UCI kin8nm dataset (path fixed to `data_real/kin8nm/`).
-* `ds.py`: combined experiment / visualization driver (multi-dataset automation + downstream baselines). Hyperparameter search is automatically skipped for linear kernel.
-* `kernel_selector_minimal.py`: tiny heuristic selector (pure NumPy) — can be ignored if you choose kernels manually.
+* `OnlineKernelSDR` (formerly `RealtimeOnlineKSPCA`): streaming updates (optional adaptive lr / forgetting / stability guards)
+* `BatchKSPCA`: batch reference (same RFF mapping interface)
+* `data_gens/`: synthetic generators for benchmarking & visualization
+* `ds.py`: unified experiment / visualization / multi-dataset automation driver
+* `kin8nm_experiment.py`: real regression dataset example (UCI kin8nm)
+* `kernel_selector_minimal.py`: tiny heuristic selector (optional)
 
-## Quick Start
+See `ARCHITECTURE.md` for internal design, data flow, and extension points.
 
-* Install dependencies (Python >= 3.10):
+---
+## 1. Quick Start
+
+Python >= 3.10
 
 ```bash
 pip install -r requirements.txt
 ```
 
-* Run an online synthetic dataset experiment (auto kernel selection):
-
+Minimal run (auto kernel, one synthetic dataset):
 ```bash
 python ds.py --dataset highly_nonlinear --kernel auto
 ```
 
-* Run the real kin8nm experiment (rbf kernel example):
-
+Real dataset (download ARFF first – see Dataset section):
 ```bash
 python kin8nm_experiment.py --data-path data_real/kin8nm/dataset_2175_kin8nm.arff
 ```
 
-## Core Classes
-
-* Online: `mainFunction/OKS_main.py`
-* Batch: `mainFunction/OKS_batch.py`
-
-## Minimal Smoke Test (Manual)
-
-One‑liner to verify core online + batch paths (linear identity, fast):
-
+Fast sanity (linear identity path):
 ```bash
 python ds.py --dataset better_xor --kernel linear --no-big-plots --fig-formats png
 ```
 
-RBF quick check:
+---
+## 2. Datasets & Modes
 
+Synthetic datasets (8):
+
+| Name | Input Dim (approx) | Targets | Complexity | Notes |
+|------|--------------------|---------|------------|-------|
+| highly_nonlinear | 10 | 5 | Medium | Spiral + radial + polynomial mix |
+| better_xor | 101 | 5 | High | Multi-output smooth XOR + interactions |
+| nuclear_friendly | 208 | 5 | High | Low linear corr, strong nonlinear deps |
+| extreme1 | 60 | 5 | High | Rich composite nonlinear transforms |
+| extreme2 | 80 | 5 | Very High | Deeper composite structure |
+| extreme3 | 100 | 5 | Very High | Torus / harmonic style structure |
+| piecewise | 50 | 5 | Medium | Discontinuities + conditional branches |
+| swiss | 80 | 5 | High | Swiss roll manifold embedding |
+
+Modes (`ds.py --mode ...`):
+
+| Mode | Description | Example |
+|------|-------------|---------|
+| (default) | Single dataset run | `python ds.py --dataset highly_nonlinear --kernel auto` |
+| all | Loop over all synthetic datasets | `python ds.py --mode all --kernel auto --no-big-plots` |
+| noise | Adds noise structure / robustness plots | `python ds.py --mode noise --dataset highly_nonlinear --kernel auto` |
+| benchmark | 8 synthetic + kin8nm quick summary | `python ds.py --mode benchmark --kernel auto --no-big-plots --no_optimize` |
+| xor | Shortcut for better_xor only | `python ds.py --mode xor --kernel auto` |
+
+Common flags:
+
+* `--quiet` (suppress routine logs; keeps warnings & final summary)
+* `--verbose` (extra diagnostics; ignored if quiet)
+* `--no-big-plots` (skip heavy multi‑panel figures)
+* `--fig-formats png,svg,pdf` (comma list; default png)
+* `--no_optimize` (disable hyperparameter search)
+
+---
+## 3. Running Examples
+
+Single RBF check:
 ```bash
-python ds.py --dataset better_xor --kernel rbf --no-big-plots --fig-formats png
+python ds.py --dataset better_xor --kernel rbf --no-big-plots
 ```
 
-Optional: subspace comparison (produces a PNG):
+Auto kernel on each synthetic dataset:
+```bash
+python ds.py --dataset highly_nonlinear --kernel auto
+python ds.py --dataset better_xor --kernel auto
+python ds.py --dataset nuclear_friendly --kernel auto
+python ds.py --dataset extreme1 --kernel auto
+python ds.py --dataset extreme2 --kernel auto
+python ds.py --dataset extreme3 --kernel auto
+python ds.py --dataset piecewise --kernel auto
+python ds.py --dataset swiss --kernel auto
+```
 
+All synthetic (batch run):
+```bash
+python ds.py --mode all --kernel auto --no-big-plots
+```
+
+Benchmark (synthetic + kin8nm subset):
+```bash
+python ds.py --mode benchmark --kernel auto --no-big-plots --no_optimize
+```
+
+Noise robustness example:
+```bash
+python ds.py --mode noise --dataset highly_nonlinear --kernel auto
+```
+
+Subspace comparison visualization:
 ```bash
 python subspace_comparison_experiment.py
 ```
 
-## Typical Outputs
+---
+## 4. Outputs & Metrics
 
-Experiments create timestamped folders under `figures/` storing:
+Each run creates a timestamped folder under `figures/` containing (extensions per selected formats):
 
-* Learned embedding scatter plots / correlation heatmaps
-* Downstream evaluation tables (classification / regression)
-* Optional online training metrics
+* `feature_embeddings.*` – low‑dim embedding scatter
+* `correlation_heatmap.*` – feature–target correlation proxy
+* `performance_comparison.*` – comparison of raw / PCA / batch / online
+* `performance_summary.txt|json` – machine-readable metrics
 
-## Multi-Dataset & Benchmark Modes
+`performance_summary` includes (typical keys):
+* `classification_acc` – downstream balanced/standard accuracy (scaled 0–1)
+* `regression_r2` – predictive R2 (may be negative for poor fit)
+* `avg_correlation` – mean abs correlation between extracted components & targets
+* `feature_dim` – effective latent dimension (k) used in scoring penalty
 
-Unified driver: `ds.py` (no separate run_all_datasets.py). Use `--mode`:
+---
+## 5. Hyperparameters & Optimization
 
-| Mode | Example Command | Description |
-|------|-----------------|-------------|
-| (default) | `python ds.py --dataset highly_nonlinear --kernel auto` | Single dataset run |
-| all | `python ds.py --mode all --kernel auto --no-big-plots` | Loop over all synthetic generators |
-| noise | `python ds.py --mode noise --dataset highly_nonlinear --kernel auto` | Adds noise structure & robustness analyses |
-| benchmark | `python ds.py --mode benchmark --kernel auto --no-big-plots --no_optimize` | 8 synthetic + kin8nm quick summary |
+Hyperparameter search is: (a) lightweight, (b) skipped automatically for `linear` (identity mapping), (c) disable via `--no_optimize`.
 
-Flags:
+When enabled and kernel ≠ linear:
+1. Optional kernel auto-selection (`--kernel auto`) chooses `linear` or `rbf` using correlation heuristics.
+2. A small candidate set (dataset-specific) over `(D_x, D_y, sigma_x, sigma_y, learning_rate)` is sampled.
+3. Each candidate runs a short pass; a composite score is computed:
+   `score = 0.4*classification_acc + 0.4*max(0, regression_r2) + 0.2*avg_correlation`, scaled by dimensional penalty `1/(1 + feature_dim/10)`.
+4. Best configuration retained for the main reporting.
 
-* `--quiet` suppress routine logs (keeps warnings/errors/final summaries)
-* `--verbose` extra diagnostics (ignored if quiet)
-* `--no-big-plots` skip heavy multi‑panel composites
-* `--fig-formats png,svg,pdf` select formats (default png)
-* `--no_optimize` skip hyperparameter search (linear always skips)
+Linear kernel path:
+* Enforces identity: `D_x = d_x`, `D_y = d_y`
+* No sigma / random features
+* Search bypassed unconditionally
 
-Per-dataset folder under `figures/` typically contains:
-
-* performance_comparison.*
-* feature_embeddings.*
-* correlation_heatmap.*
-* performance_summary.(txt|json)
-
-Noise mode adds robustness / noise structure plots.
-
-Minimal single-dataset (auto selection):
-
+Disable all search:
 ```bash
-python ds.py --dataset highly_nonlinear --kernel auto
+python ds.py --dataset highly_nonlinear --kernel rbf --no_optimize
 ```
 
-Linear baseline:
+---
+## 6. Pytest Regression Tests
 
-```bash
-python ds.py --dataset highly_nonlinear --kernel linear
-```
-
-## Dataset Note
-
-`data_real/kin8nm/dataset_2175_kin8nm.arff` must be obtained from the UCI repository
-and placed accordingly. Unused `sarcos_data` assets were removed.
-
-## Notes / Design Decisions
-
-* Linear kernel: pure passthrough (no random features). Dimension must match input. Hyperparameter search is skipped.
-* RFF implementation unified in `mainFunction/rff.py`.
-* Online and batch share the same feature mapping; projection learning differs.
-* Kernel selector is optional; you can supply `--kernel linear` or `--kernel rbf` directly.
-* Figures: specify formats (e.g. `--fig-formats png`). Large multi‑panel plots disabled with `--no-big-plots`.
-* Optimization: only meaningful for non-linear kernels; automatically bypassed for linear to avoid noise.
-
-## Testing
-
-Basic regression tests available:
-
+Install & run:
 ```bash
 pip install pytest
 python -m pytest -q
 ```
+Covers: core streaming update sanity, kernel selector behavior, projection consistency. Runtime is small (fast smoke coverage, not exhaustive statistical validation).
 
-Tests cover core algorithm sanity, kernel selector behavior, and basic functionality.
+---
+## 7. Internals
 
-## Suggested Next Enhancements
+Core classes:
+* Online: `mainFunction/OKS_main.py`
+* Batch: `mainFunction/OKS_batch.py`
+
+Random feature mapping unified in `mainFunction/rff.py`. Design & extension notes (adding kernels, new generators, adaptation strategies) are detailed in `ARCHITECTURE.md`.
+
+---
+## 8. Dataset Notes
+
+Real kin8nm file: place `dataset_2175_kin8nm.arff` under `data_real/kin8nm/` (download from UCI Machine Learning Repository). Other legacy `sarcos_data` assets removed.
+
+---
+## 9. Suggested Next Enhancements
 
 | Area | Idea |
 |------|------|
-| Packaging | Add `pyproject.toml` for modern Python packaging |
-| Benchmark Config | YAML/JSON profile for consistent multi-run reproducibility |
-| Caching | Memoize adaptive sigma search results per dataset/kernel |
-| Advanced Tests | Statistical validation of embedding quality |
+| Packaging | Add `pyproject.toml` (modern packaging / build isolation) |
+| Benchmark Config | YAML/JSON profile for reproducible multi-run suites |
+| Caching | Memoize sigma search results per dataset/kernel |
+| Advanced Tests | Statistical embedding quality assertions |
+| New Kernels | Add Laplace / Matern tunable variants in optimization |
 
-## License
+---
+## 10. License
 
 Released under the MIT License (see `LICENSE`).
 
 ---
-Issues / PRs welcome for improvements: online stability, adaptive strategies, new kernels.
+Issues / PRs welcome (focus ideas: online stability, adaptive strategies, new kernels).
