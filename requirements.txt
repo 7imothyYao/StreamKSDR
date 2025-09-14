@@ -1,0 +1,19 @@
+# Online KSPCA Project - Core Dependencies
+# Author: Your Name
+# Date: 2025-08-11
+# Python: 3.13.6
+
+# Core Scientific Computing (exact versions loosely pinned; adjust as needed)
+numpy>=2.3.0
+scipy>=1.16.0
+
+# Machine Learning
+scikit-learn>=1.5.0
+
+# Visualization
+matplotlib>=3.8.0
+seaborn>=0.13.0
+
+# Optional (uncomment if notebook exploration required)
+# jupyter
+# ipykernel
