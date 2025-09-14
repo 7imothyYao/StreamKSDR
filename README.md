@@ -1,7 +1,6 @@
 # StreamKSDR (Online Kernel Supervised Dimensionality Reduction)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-![CI](https://github.com/your-org/StreamKSDR/actions/workflows/ci.yml/badge.svg)
 
 This repository provides online (streaming, one-sample updates) and batch variants
 of Kernel Supervised Dimensionality Reduction (KSDR) using Random Fourier Features (RFF).
