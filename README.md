@@ -2,18 +2,19 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Online + streaming (single-sample) and batch variants of Kernel Supervised Dimensionality Reduction (KSDR) using Random Fourier Features (RFF). Linear kernel is a strict identity (no random projection, no sigma search). A minimal kernel selector can choose between `linear` and `rbf` via lightweight correlation heuristics.
+Online + streaming (single-sample) and batch variants of Kernel Supervised Dimensionality Reduction (KSDR) using Random Fourier Features (RFF). Linear kernel is a strict identity (no random projection, no sigma search). A lightweight heuristic kernel selector (`kernel_selector.py`) computes a combined linearity score (max feature‑target correlation + simple explained variance mix) to choose `linear` vs `rbf` when `--kernel auto`.
 
 * `OnlineKernelSDR` (formerly `RealtimeOnlineKSPCA`): streaming updates (optional adaptive lr / forgetting / stability guards)
 * `BatchKSPCA`: batch reference (same RFF mapping interface)
 * `data_gens/`: synthetic generators for benchmarking & visualization
 * `ds.py`: unified experiment / visualization / multi-dataset automation driver
 * `kin8nm_experiment.py`: real regression dataset example (UCI kin8nm)
-* `kernel_selector_minimal.py`: tiny heuristic selector (optional)
+* `kernel_selector.py`: heuristic kernel selection (combined linearity score)
 
 See `ARCHITECTURE.md` for internal design, data flow, and extension points.
 
 ---
+
 ## 1. Quick Start
 
 Python >= 3.10
@@ -23,21 +24,25 @@ pip install -r requirements.txt
 ```
 
 Minimal run (auto kernel, one synthetic dataset):
+
 ```bash
 python ds.py --dataset highly_nonlinear --kernel auto
 ```
 
 Real dataset (download ARFF first – see Dataset section):
+
 ```bash
 python kin8nm_experiment.py --data-path data_real/kin8nm/dataset_2175_kin8nm.arff
 ```
 
 Fast sanity (linear identity path):
+
 ```bash
 python ds.py --dataset better_xor --kernel linear --no-big-plots --fig-formats png
 ```
 
 ---
+
 ## 2. Datasets & Modes
 
 Synthetic datasets (8):
@@ -72,14 +77,17 @@ Common flags:
 * `--no_optimize` (disable hyperparameter search)
 
 ---
+
 ## 3. Running Examples
 
 Single RBF check:
+
 ```bash
 python ds.py --dataset better_xor --kernel rbf --no-big-plots
 ```
 
 Auto kernel on each synthetic dataset:
+
 ```bash
 python ds.py --dataset highly_nonlinear --kernel auto
 python ds.py --dataset better_xor --kernel auto
@@ -92,26 +100,31 @@ python ds.py --dataset swiss --kernel auto
 ```
 
 All synthetic (batch run):
+
 ```bash
 python ds.py --mode all --kernel auto --no-big-plots
 ```
 
 Benchmark (synthetic + kin8nm subset):
+
 ```bash
 python ds.py --mode benchmark --kernel auto --no-big-plots --no_optimize
 ```
 
 Noise robustness example:
+
 ```bash
 python ds.py --mode noise --dataset highly_nonlinear --kernel auto
 ```
 
 Subspace comparison visualization:
+
 ```bash
 python subspace_comparison_experiment.py
 ```
 
 ---
+
 ## 4. Outputs & Metrics
 
 Each run creates a timestamped folder under `figures/` containing (extensions per selected formats):
@@ -122,58 +135,65 @@ Each run creates a timestamped folder under `figures/` containing (extensions pe
 * `performance_summary.txt|json` – machine-readable metrics
 
 `performance_summary` includes (typical keys):
+
 * `classification_acc` – downstream balanced/standard accuracy (scaled 0–1)
 * `regression_r2` – predictive R2 (may be negative for poor fit)
 * `avg_correlation` – mean abs correlation between extracted components & targets
 * `feature_dim` – effective latent dimension (k) used in scoring penalty
 
 ---
+
 ## 5. Hyperparameters & Optimization
 
-Hyperparameter search is: (a) lightweight, (b) skipped automatically for `linear` (identity mapping), (c) disable via `--no_optimize`.
+Current built‑in search: **preset candidate lists (per dataset)** + optional random down‑sampling when candidates > `max_configs`. It is *not* a full grid or Bayesian search. Linear kernel path is skipped entirely (identity mapping). Use `--no_optimize` to disable.
 
-When enabled and kernel ≠ linear:
-1. Optional kernel auto-selection (`--kernel auto`) chooses `linear` or `rbf` using correlation heuristics.
-2. A small candidate set (dataset-specific) over `(D_x, D_y, sigma_x, sigma_y, learning_rate)` is sampled.
-3. Each candidate runs a short pass; a composite score is computed:
-   `score = 0.4*classification_acc + 0.4*max(0, regression_r2) + 0.2*avg_correlation`, scaled by dimensional penalty `1/(1 + feature_dim/10)`.
-4. Best configuration retained for the main reporting.
+Process (non-linear kernels):
 
-Linear kernel path:
-* Enforces identity: `D_x = d_x`, `D_y = d_y`
-* No sigma / random features
-* Search bypassed unconditionally
+1. Optional auto kernel selection (`--kernel auto`) → `linear` vs `rbf` (combined linearity score).
+2. Load a small curated list of candidate configs (hand-tuned ranges for `(D_x, D_y, sigma_x, sigma_y, learning_rate)`).
+3. If list longer than `max_configs`, randomly sample a subset without replacement.
+4. Evaluate each once; compute composite score:
+   `0.4*classification_acc + 0.4*max(0, regression_r2) + 0.2*avg_correlation`, scaled by `1/(1 + feature_dim/10)`.
+5. Best configuration is reported (currently NOT auto-applied to the subsequent full run – integration placeholder).
 
 Disable all search:
+
 ```bash
 python ds.py --dataset highly_nonlinear --kernel rbf --no_optimize
 ```
 
 ---
+
 ## 6. Pytest Regression Tests
 
 Install & run:
+
 ```bash
 pip install pytest
 python -m pytest -q
 ```
+
 Covers: core streaming update sanity, kernel selector behavior, projection consistency. Runtime is small (fast smoke coverage, not exhaustive statistical validation).
 
 ---
+
 ## 7. Internals
 
 Core classes:
+
 * Online: `mainFunction/OKS_main.py`
 * Batch: `mainFunction/OKS_batch.py`
 
 Random feature mapping unified in `mainFunction/rff.py`. Design & extension notes (adding kernels, new generators, adaptation strategies) are detailed in `ARCHITECTURE.md`.
 
 ---
+
 ## 8. Dataset Notes
 
 Real kin8nm file: place `dataset_2175_kin8nm.arff` under `data_real/kin8nm/` (download from UCI Machine Learning Repository). Other legacy `sarcos_data` assets removed.
 
 ---
+
 ## 9. Suggested Next Enhancements
 
 | Area | Idea |
@@ -185,6 +205,7 @@ Real kin8nm file: place `dataset_2175_kin8nm.arff` under `data_real/kin8nm/` (do
 | New Kernels | Add Laplace / Matern tunable variants in optimization |
 
 ---
+
 ## 10. License
 
 Released under the MIT License (see `LICENSE`).

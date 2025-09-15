@@ -10,97 +10,101 @@ StreamKSDR provides supervised dimensionality reduction with both online (stream
 |--------|---------|----------|
 | `mainFunction/OKS_main.py` | OnlineKernelSDR implementation | RFF mapping + incremental update of projection matrix U |
 | `mainFunction/OKS_batch.py` | BatchKSPCA baseline | Fits projection using entire dataset once |
-| `data_gens/` | Synthetic data generators | Each exposes a function used via `get_generator(name)` |
-| `kernel_selector.py` or `*_minimal.py` | Simple heuristic kernel choice | Returns 'linear' or 'rbf' based on correlation heuristics |
-| `optimization.py` | Lightweight hyperparameter search | Skipped automatically for linear kernel |
-| `visualization.py` | Small, fast plots | Embeddings / correlation / performance summary |
-| `reporting.py` | Comprehensive & noise analyses | Multi‑panel, robustness & noise structure plots |
+| `data_gens/` | Synthetic data generators | Each exposes a function via `get_generator(name)` |
+| `kernel_selector.py` | Heuristic kernel selection | Combined linearity score (max corr + simple explained var) → linear vs rbf |
+| `optimization.py` | Optional preset search | Curated candidate list; skipped for linear; not auto-applied yet |
+| `visualization.py` | Small, fast plots | Embeddings / correlation / performance comparison (compact) |
+| `reporting.py` | Extended & noise analyses | Multi‑panel overview, learning curves, noise robustness |
 | `fig_utils.py` | Figure directory + save helpers | Timestamped run folder + format control |
-| `ds.py` | CLI experiment orchestrator | Modes: single/all/noise/benchmark/xor |
+| `model_utils.py` | Projection helper | `project_features` for consistent centering + projection |
+| `ds.py` | CLI experiment orchestrator | Modes: dataset/all/noise/benchmark/xor |
 
 ## 3. Data / Feature Flow
 
 ```text
 Raw (X,Y)
-  -> (optional) Kernel selection ('linear' passthrough or 'rbf' RFF)
+  -> (optional) kernel selection (auto: linear passthrough or rbf RFF)
   -> Feature extraction:
-        - OnlineKernelSDR: streaming update loop
-        - BatchKSPCA: batch fit
+        OnlineKernelSDR (streaming) / BatchKSPCA (batch)
   -> Feature matrices (Z_online, Z_batch, PCA, Raw)
   -> Downstream evaluation (classification / regression / correlation)
-  -> Ranking + summary
-  -> Visualization (visualization.py / reporting.py)
+  -> Scoring + summary (dimension penalty)
+  -> Visualization (visualization.py + reporting.py)
 ```
 
 ## 4. Online Algorithm (High-Level)
 
-1. Map X,Y to random Fourier feature spaces (if kernel != linear; else identity).
-2. Maintain running means for centering.
-3. Update cross-covariance estimator incrementally.
-4. Perform a low-rank update / orthonormalization to keep top-k supervised directions.
-5. Project incoming samples using learned U.
+1. Map X,Y to random Fourier feature spaces (if kernel != linear; else identity)
+2. Maintain running means for centering
+3. Incrementally update cross-covariance estimator
+4. Low-rank orthonormalization / top-k update
+5. Project new samples via learned U
 
 ## 5. Kernels
 
-- Linear: identity mapping (no sigma, no random projection, faster, no optimization).
-- RBF: uses median heuristic / small grid in selection or optimization path.
+- Linear: identity mapping (no sigma, no random projection, no search)
+- RBF: random Fourier features; sigma chosen from small preset candidates (or defaults)
 
 ## 6. Logging
 
-- Unified via Python `logging` (INFO default, WARNING under `--quiet`, DEBUG under `--verbose`).
-- Avoid direct `print` in new code; use `logger = logging.getLogger(__name__)`.
+- Standard Python `logging` (INFO default, WARNING under `--quiet`, DEBUG under `--verbose`)
+- No monkey-patching of `print`
 
 ## 7. Experiment Modes (`ds.py`)
 
 | Mode | Description |
 |------|-------------|
-| `dataset` / `single` | One dataset end‑to‑end run |
-| `all` | Iterate through all synthetic datasets |
-| `noise` | Adds noise structure & robustness analyses |
-| `benchmark` | 8 synthetic + kin8nm quick summary (lightweight) |
+| `dataset` / `single` | One dataset run |
+| `all` | Iterate all synthetic datasets |
+| `noise` | Adds noise structure + robustness analyses |
+| `benchmark` | 8 synthetic + kin8nm quick summary |
 | `xor` | Convenience alias for `better_xor` |
 
 ## 8. Adding a New Dataset
 
-1. Create `data_gens/<name>.py` with a generator function signature `(n_samples, noise_level, random_state, **kwargs)`.
-2. Register it in `data_gens/__init__.py` inside the `get_generator` mapping.
-3. Run: `python ds.py --dataset <name> --kernel auto`.
+1. Create `data_gens/<name>.py` with `(n_samples, noise_level, random_state, **kwargs)`
+2. Register in `data_gens/__init__.py`
+3. Run: `python ds.py --dataset <name> --kernel auto`
 
-## 9. Adding a New Visualization
+## 9. Visualization Layers
 
-- Small / per-dataset: implement in `visualization.py` and call from `ds.py` pipeline.
-- Complex / multi-figure or noise related: put in `reporting.py`.
+- `visualization.py`: compact single-purpose figures (embeddings, correlation heatmap, performance bar charts)
+- `reporting.py`: comprehensive multi-panel overview, noise structure, noise robustness, learning curves
 
-## 10. Extending Kernels
+## 10. Kernel Selection Heuristic
 
-- Implement mapping (or identity) in a new utility or extend existing RFF file.
-- Update kernel selector if heuristic should consider it (optional).
-- Add conditional branches in feature extraction where needed.
+- Score = 0.7 \* (max feature–target correlation aggregate) + 0.3 \* (simple explained variance on first target)
+- Threshold (default 0.4): score >= threshold → linear else rbf
+- Confidence is a clipped scaled function of score distance
 
-## 11. Hyperparameter Optimization
+## 11. Hyperparameter Optimization (Optional)
 
-- Only meaningful for non-linear kernels; linear path returns early.
-- Keep searches small (max_configs) to avoid heavy runtime.
+- Not a grid or adaptive search; uses a **curated candidate list per dataset**
+- If candidates > `max_configs`, random subset sampled without replacement
+- Composite score: `0.4*classification_acc + 0.4*max(0, regression_r2) + 0.2*avg_correlation`, scaled by `1/(1 + feature_dim/10)`
+- Linear path short-circuits to identity config
+- Best config currently **reported but not auto-applied** (hook placeholder)
 
 ## 12. Testing (pytest minimal set)
 
-- `tests/test_online_basic.py`: shape validation + no-crash for online/batch models
-- `tests/test_kernel_selector.py`: kernel selection sanity checks on linear vs nonlinear data
+- `tests/test_online_basic.py`: shape + streaming/batch sanity
+- `tests/test_kernel_selector.py`: kernel heuristic behavior
 
-Run via: `python -m pytest -q`
+Run: `python -m pytest -q`
 
 ## 13. Future Improvements
 
-- More rigorous statistical tests of embedding quality and convergence.
-- Additional downstream benchmarks beyond classification/regression.
-- Performance profiling and optimization for large-scale data.
+- Statistical validation of embedding quality
+- Additional downstream tasks / benchmarks
+- Performance profiling (large-scale streaming)
+- Automatic application of best hyperparameters
 
 ## 14. Style Guidelines
 
-- Prefer pure functions where practical inside generators.
-- Avoid large monolithic plotting blocks inside `ds.py` (route to modules).
-- Logging only—no new monkey-patching of `print`.
+- Prefer modular small plotting functions
+- Keep heavy analysis in `reporting.py`
+- Use logging only; avoid silent broad exceptions
 
 ---
 
-This architecture document is intentionally concise; expand sections if deeper algorithmic exposition is required.
+Concise by design; extend with deeper derivations if needed.
