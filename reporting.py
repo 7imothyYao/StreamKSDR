@@ -11,7 +11,7 @@ import seaborn as sns
 from fig_utils import save_fig, set_dataset_save_dir
 import fig_utils
 from mainFunction.OKS_main import OnlineKernelSDR
-from mainFunction.OKS_batch import BatchKSPCA
+from mainFunction.OKS_batch import BatchKSDR
 
 def create_comprehensive_visualizations(X, Y, feature_sets, models, results, methods_order=None, quiet=False):
     if quiet:
@@ -20,7 +20,7 @@ def create_comprehensive_visualizations(X, Y, feature_sets, models, results, met
     else:
         print("\n=== Generating Visualization Results ===")
     if methods_order is None:
-        methods_order = ['Raw','PCA','Batch_KSPCA','Online_KSPCA']
+        methods_order = ['Raw','PCA','Batch_KSDR','Online_KSDR']
     plt.rcParams['figure.figsize'] = (15, 12)
     fig = plt.figure(figsize=(20,15))
     use_high_dim_viz = X.shape[1] > 50 or Y.shape[1] > 10
@@ -83,7 +83,7 @@ def plot_online_learning_curves(X, Y, online_model, quiet=False):
     sigma_x = getattr(online_model,'sigma_x',15.0); sigma_y = getattr(online_model,'sigma_y',15.0)
     base_lr = getattr(online_model,'base_lr',0.01)
     learner = OnlineKernelSDR(d_x=d_x,d_y=d_y,k=k_latent,D_x=D_x,D_y=D_y,sigma_x=sigma_x,sigma_y=sigma_y,kernel_x=getattr(online_model,'kernel_x','rbf'),kernel_y=getattr(online_model,'kernel_y','rbf'),base_lr=base_lr,adaptive_lr=True,random_state=42)
-    batch = BatchKSPCA(d_x,d_y,k=k_latent,D_x=D_x,D_y=D_y,sigma_x=sigma_x,sigma_y=sigma_y,kernel_x=getattr(online_model,'kernel_x','rbf'),kernel_y=getattr(online_model,'kernel_y','rbf'),random_state=42)
+    batch = BatchKSDR(d_x,d_y,k=k_latent,D_x=D_x,D_y=D_y,sigma_x=sigma_x,sigma_y=sigma_y,kernel_x=getattr(online_model,'kernel_x','rbf'),kernel_y=getattr(online_model,'kernel_y','rbf'),random_state=42)
     batch.fit(X,Y)
     order = np.random.RandomState(123).permutation(N)
     errors, angles, corrs, samples = [],[],[],[]

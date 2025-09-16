@@ -4,8 +4,8 @@
 
 Online + streaming (single-sample) and batch variants of Kernel Supervised Dimensionality Reduction (KSDR) using Random Fourier Features (RFF). Linear kernel is a strict identity (no random projection, no sigma search). A lightweight heuristic kernel selector (`kernel_selector.py`) computes a combined linearity score (max feature‑target correlation + simple explained variance mix) to choose `linear` vs `rbf` when `--kernel auto`.
 
-* `OnlineKernelSDR` (formerly `RealtimeOnlineKSPCA`): streaming updates (optional adaptive lr / forgetting / stability guards)
-* `BatchKSPCA`: batch reference (same RFF mapping interface)
+* `OnlineKernelSDR`: streaming updates (optional adaptive lr / forgetting / stability guards)
+* `BatchKSDR`: batch reference (same RFF mapping interface)
 * `data_gens/`: synthetic generators for benchmarking & visualization
 * `ds.py`: unified experiment / visualization / multi-dataset automation driver
 * `kin8nm_experiment.py`: real regression dataset example (UCI kin8nm)

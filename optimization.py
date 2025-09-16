@@ -13,12 +13,12 @@ import time
 import numpy as np
 from data_gens import get_generator
 from mainFunction.OKS_main import OnlineKernelSDR
-from mainFunction.OKS_batch import BatchKSPCA
+from mainFunction.OKS_batch import BatchKSDR
 from kernel_selector import KernelSelector
 
 # ---- Scoring ----
 
-def calculate_optimization_score(metrics, method_name: str = "Online_KSPCA") -> float:
+def calculate_optimization_score(metrics, method_name: str = "Online_KSDR") -> float:
     if method_name not in metrics:
         return 0.0
     m = metrics[method_name]
@@ -77,7 +77,7 @@ def run_optimized_experiment(dataset: str, config: dict, n_samples: int = 1500):
         D_y = config.get('D_y', 250)
     sigma_x = config.get('sigma_x', 15.0)
     sigma_y = config.get('sigma_y', 12.0)
-    batch_kspca = BatchKSPCA(d_x=X.shape[1], d_y=Y.shape[1], k=k,
+    batch_kspca = BatchKSDR(d_x=X.shape[1], d_y=Y.shape[1], k=k,
                              D_x=D_x, D_y=D_y,
                              sigma_x=sigma_x, sigma_y=sigma_y,
                              kernel_x=kernel_type, kernel_y=kernel_type,
@@ -98,7 +98,7 @@ def run_optimized_experiment(dataset: str, config: dict, n_samples: int = 1500):
     X_batch = phi_X_batch @ batch_kspca.U
     X_online = phi_X_online @ online_kspca.U
     from ds import evaluate_downstream_tasks  # local import to avoid circular heavy imports at module load
-    results = evaluate_downstream_tasks({'Batch_KSPCA': X_batch,'Online_KSPCA': X_online}, X, Y)
+    results = evaluate_downstream_tasks({'Batch_KSDR': X_batch,'Online_KSDR': X_online}, X, Y)
     return results, {'batch_kspca': batch_kspca, 'online_kspca': online_kspca}
 
 # ---- Main optimization routine ----
@@ -109,7 +109,7 @@ def run_hyperparameter_optimization(dataset: str = "better_xor", kernel: str = "
     print(f"Starting Enhanced Hyperparameter Optimization for {dataset}")
     print("="*80)
     print(f"Dataset: {dataset}")
-    print(f"Target: Optimize Online KSPCA performance")
+    print(f"Target: Optimize Online KSDR performance")
     print(f"Max configs to test: {max_configs}")
     print(f"Sample size: {n_samples}")
     print(f"Kernel type: {kernel}")
@@ -131,8 +131,8 @@ def run_hyperparameter_optimization(dataset: str = "better_xor", kernel: str = "
         identity_config = {'kernel': 'linear', 'learning_rate': 0.0, 'D_x': X_tmp.shape[1], 'D_y': Y_tmp.shape[1]}
         try:
             results, models = run_optimized_experiment(dataset, identity_config, n_samples)
-            score_online = calculate_optimization_score(results, 'Online_KSPCA')
-            score_batch = calculate_optimization_score(results, 'Batch_KSPCA')
+            score_online = calculate_optimization_score(results, 'Online_KSDR')
+            score_batch = calculate_optimization_score(results, 'Batch_KSDR')
             print("Optimization (trivial) complete.")
             print("Online score:", f"{score_online:.4f}")
             print("Batch  score:", f"{score_batch:.4f}")
@@ -190,8 +190,8 @@ def run_hyperparameter_optimization(dataset: str = "better_xor", kernel: str = "
             start = time.time()
             results, models = run_optimized_experiment(dataset, c, n_samples)
             elapsed = time.time() - start
-            online_score = calculate_optimization_score(results, "Online_KSPCA")
-            batch_score = calculate_optimization_score(results, "Batch_KSPCA")
+            online_score = calculate_optimization_score(results, "Online_KSDR")
+            batch_score = calculate_optimization_score(results, "Batch_KSDR")
             entry = {
                 'config': c.copy(),
                 'online_score': online_score,
@@ -203,8 +203,8 @@ def run_hyperparameter_optimization(dataset: str = "better_xor", kernel: str = "
             }
             results_summary.append(entry)
             print(f"   Success. Time: {elapsed:.1f}s")
-            print(f"   Online KSPCA Score: {online_score:.4f}")
-            print(f"   Batch KSPCA Score: {batch_score:.4f}")
+            print(f"   Online KSDR Score: {online_score:.4f}")
+            print(f"   Batch KSDR1 Score: {batch_score:.4f}")
         except Exception as e:
             print(f"   [Fail] {e}")
     if not results_summary:
@@ -217,8 +217,8 @@ def run_hyperparameter_optimization(dataset: str = "better_xor", kernel: str = "
     print("="*80)
     print(f"Best Configuration: {best['name']}")
     print("Performance:")
-    print(f"   Online KSPCA Score: {best['online_score']:.4f}")
-    print(f"   Batch KSPCA Score: {best['batch_score']:.4f}")
+    print(f"   Online KSDR Score: {best['online_score']:.4f}")
+    print(f"   Batch KSDR Score: {best['batch_score']:.4f}")
     print(f"   Best Time: {best['elapsed']:.2f}s")
     print(f"Total optimization time: {time.time()-total_start:.1f}s")
     for k,v in best['config'].items():

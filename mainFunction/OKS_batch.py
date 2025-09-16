@@ -3,7 +3,7 @@
 import numpy as np
 from .rff import RFF
     
-class BatchKSPCA:
+class BatchKSDR:
     def __init__(self,
                  d_x: int, # input dimension
                  d_y: int, # output dimension
@@ -26,7 +26,7 @@ class BatchKSPCA:
         self.mean_x = None
         self.mean_y = None
         
-    def fit(self, X: np.ndarray, Y: np.ndarray) -> 'BatchKSPCA':
+    def fit(self, X: np.ndarray, Y: np.ndarray) -> 'BatchKSDR':
         n_samples = X.shape[0]
         
         Phi = self.rff_x.transform(X)

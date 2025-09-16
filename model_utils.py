@@ -1,7 +1,7 @@
 """Model utility helpers for feature projection (avoid code duplication).
 
 project_features(model, X):
-  Supports BatchKSPCA (expects attributes rff_x, mean_x, U) and OnlineKernelSDR
+  Supports BatchKSDR (expects attributes rff_x, mean_x, U) and OnlineKernelSDR
   Returns centered projected features Phi_x_centered @ U
 """
 from __future__ import annotations

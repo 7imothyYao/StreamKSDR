@@ -24,7 +24,7 @@ from optimization import (get_adaptive_configurations, run_hyperparameter_optimi
 import fig_utils  # for accessing fig_utils.CURRENT_FIG_SAVE_DIR dynamically
 
 # ================= Constants / Global Configuration =================
-METHODS_ORDER = ['Raw', 'PCA', 'Batch_KSPCA', 'Online_KSPCA']
+METHODS_ORDER = ['Raw', 'PCA', 'Batch_KSDR', 'Online_KSDR']
 DIM_PENALTY_BASE = 3  # Base for dimensionality penalty in composite scoring
 DEFAULT_VERBOSE = False
 DEFAULT_QUIET = False
@@ -47,7 +47,7 @@ PRINTED_WARNINGS = set()
 # Add path for local imports
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from mainFunction.OKS_main import OnlineKernelSDR
-from mainFunction.OKS_batch import BatchKSPCA
+from mainFunction.OKS_batch import BatchKSDR
 from data_gens import get_generator
 from kernel_selector import KernelSelector
 from model_utils import project_features
@@ -78,7 +78,7 @@ def compare_feature_extraction_methods(X, Y, kernel: str = "rbf", learning_rate=
     Parameters:
     - X: Input features
     - Y: Target features
-    - kernel: Kernel type for KSPCA methods ('rbf' or 'linear')
+    - kernel: Kernel type for Kernel SDR methods ('rbf' or 'linear')
 
     Returns:
     - feature_sets: Dictionary containing extracted features from different methods
@@ -133,7 +133,7 @@ def compare_feature_extraction_methods(X, Y, kernel: str = "rbf", learning_rate=
                 sx = base_sigma_x * mx
                 sy = base_sigma_y * my
                 # build temporary RFFs
-                from mainFunction.OKS_batch import BatchKSPCA as _BK  # local import to avoid circular
+                from mainFunction.OKS_batch import BatchKSDR as _BK  # local import to avoid circular
                 tmp = _BK(Xs.shape[1], Ys.shape[1], k=k_latent, D_x=D_x, D_y=D_y, sigma_x=sx, sigma_y=sy, kernel_x=kernel, kernel_y=kernel, random_state=random_state)
                 # manually compute score quickly without full fit on all data
                 phi_x = tmp.rff_x.transform(X_sub)
@@ -183,12 +183,12 @@ def compare_feature_extraction_methods(X, Y, kernel: str = "rbf", learning_rate=
     pca.fit(X_train)
     X_pca = pca.transform(X)
     
-    # 3. Batch KSPCA (using optimized parameters)
+    # 3. Batch Kernel SDR (using optimized parameters)
     if verbose:
-        print("Training Batch KSPCA...")
+        print("Training Batch KSDR (formerly BatchKSPCA)...")
     # -------- RFF dimension selection (B1) --------
     def _score_rff_dims(Dx, Dy, sigma_x, sigma_y, k_latent, subset_n=400, kernel: str = "rbf", seed=77):
-        from mainFunction.OKS_batch import BatchKSPCA as _BK
+        from mainFunction.OKS_batch import BatchKSDR as _BK
         rng_loc = np.random.RandomState(seed)
         idx = rng_loc.choice(X_train.shape[0], size=min(subset_n, X_train.shape[0]), replace=False)
         X_sub = X_train[idx]; Y_sub = Y_train[idx]
@@ -228,15 +228,15 @@ def compare_feature_extraction_methods(X, Y, kernel: str = "rbf", learning_rate=
             print("[RFF Dim Select] candidates=" + ", ".join([f"{Dx}/{Dy}:{sc:.4f}" for sc,Dx,Dy in rff_scores]) )
             print(f"[RFF Dim Select] chosen D_x={best_Dx} D_y={best_Dy} (score={best_score:.4f})")
 
-    batch_kspca = BatchKSPCA(d_x, d_y, k=k, D_x=best_Dx, D_y=best_Dy,
+    batch_kspca = BatchKSDR(d_x, d_y, k=k, D_x=best_Dx, D_y=best_Dy,
                             sigma_x=sigma_x_opt, sigma_y=sigma_y_opt,
                             kernel_x=kernel, kernel_y=kernel, random_state=42)
     batch_kspca.fit(X_train, Y_train)
     
-    # Get batch KSPCA features (proper centering)
+    # Get batch Kernel SDR features (proper centering)
     X_batch_kspca = project_features(batch_kspca, X)
     
-    # 5. Online KSPCA (using optimized parameters)
+    # 5. Online Kernel SDR (using optimized parameters)
     if verbose:
         print("Training Online Kernel SDR (OnlineKernelSDR)...")
     # Adaptive learning rate based on data complexity
@@ -256,7 +256,7 @@ def compare_feature_extraction_methods(X, Y, kernel: str = "rbf", learning_rate=
     for idx in indices_stream:
         online_kspca.update(X[idx], Y[idx])
     
-    # Get online KSPCA features (proper centering)
+    # Get online Kernel SDR features (proper centering)
     X_online_kspca = project_features(online_kspca, X)
     
     # Collect experiment configuration metadata
@@ -275,8 +275,8 @@ def compare_feature_extraction_methods(X, Y, kernel: str = "rbf", learning_rate=
     return {
         'Raw': X_raw,
         'PCA': X_pca,
-        'Batch_KSPCA': X_batch_kspca,
-        'Online_KSPCA': X_online_kspca
+    'Batch_KSDR': X_batch_kspca,
+    'Online_KSDR': X_online_kspca
     }, {
         'pca': pca,
         'batch_kspca': batch_kspca,
@@ -379,7 +379,7 @@ def evaluate_downstream_tasks(feature_sets, X, Y, idx_split=None, verbose: bool 
             correlations.append(abs(corr))
         avg_corr = np.mean(correlations)
         
-        # Add theoretical performance comparison for KSPCA methods
+    # Add theoretical performance comparison for Kernel SDR methods
         results[name] = {
             'classification_acc': acc,
             'cv_classification_acc': cv_acc,
@@ -402,18 +402,18 @@ def evaluate_downstream_tasks(feature_sets, X, Y, idx_split=None, verbose: bool 
                 print(f"  Ridge Alpha Selected: {reg.alpha_:.4f}")
         
         # Warning if online outperforms batch significantly
-        if name == 'Online_KSPCA' and 'Batch_KSPCA' in results:
-            batch_r2 = results['Batch_KSPCA']['regression_r2']
-            batch_cv_r2 = results['Batch_KSPCA']['cv_regression_r2']
+        if name == 'Online_KSDR' and 'Batch_KSDR' in results:
+            batch_r2 = results['Batch_KSDR']['regression_r2']
+            batch_cv_r2 = results['Batch_KSDR']['cv_regression_r2']
             if r2 > batch_r2 + 0.05 or cv_r2 > batch_cv_r2 + 0.05:
                 warn_key = (round(batch_r2,3), round(r2,3), 'R2gap')
                 if warn_key not in PRINTED_WARNINGS:
                     PRINTED_WARNINGS.add(warn_key)
                     if not DEFAULT_QUIET:
-                        print(f"  WARNING: Online KSPCA > Batch KSPCA dR2_test={r2-batch_r2:.4f} dR2_CV={cv_r2-batch_cv_r2:.4f}")
+                        print(f"  WARNING: Online KSDR > Batch KSDR1 dR2_test={r2-batch_r2:.4f} dR2_CV={cv_r2-batch_cv_r2:.4f}")
 
         # Diagnostics (verbose only)
-        if verbose and 'KSPCA' in name:
+    if verbose and ('KSDR' in name):
             feat_mean = np.mean(X_features, axis=0)
             feat_std = np.std(X_features, axis=0)
             feat_range = np.max(X_features, axis=0) - np.min(X_features, axis=0)
@@ -724,7 +724,7 @@ def main(dataset: str = "highly_nonlinear", kernel: str = "auto", include_big_pl
     if not DEFAULT_QUIET:
         print(f"\nConclusions:")
         print(f"  Best method: {ranking[0][0]} (score: {ranking[0][1]:.4f})")
-        print(f"  Online KSPCA improves over linear baselines on nonlinear structure")
+        print(f"  Online KSDR improves over linear baselines on nonlinear structure")
         print(f"  Adam optimization supports stable convergence in online updates")
         print(f"  Kernel methods capture nonlinear relationships beyond linear PCA")
 
@@ -752,7 +752,7 @@ def run_optimized_experiment(dataset: str, config: dict, n_samples: int = 1500):
     k = 5  # Target dimension
 
     # Batch KSPCA with custom parameters
-    batch_kspca = BatchKSPCA(
+    batch_kspca = BatchKSDR(
         d_x=X.shape[1], d_y=Y.shape[1], k=k,
         D_x=D_x, D_y=D_y,
         sigma_x=sigma_x, sigma_y=sigma_y,
@@ -786,7 +786,7 @@ def run_optimized_experiment(dataset: str, config: dict, n_samples: int = 1500):
 
     # Ensure proper centering before projection (robust if future code changes initialization)
     if batch_kspca.U is None:
-        raise RuntimeError("BatchKSPCA.U is None after fit")
+        raise RuntimeError("BatchKSDR.U is None after fit")
     if online_kspca.U is None:
         raise RuntimeError("OnlineKernelSDR.U is None after updates")
     # If linear kernel + identity mapping, mean_x may be length d_x (not D_x) but current implementation keeps D_x
@@ -797,8 +797,8 @@ def run_optimized_experiment(dataset: str, config: dict, n_samples: int = 1500):
 
     # Evaluate performance
     results = evaluate_downstream_tasks({
-        'Batch_KSPCA': X_batch,
-        'Online_KSPCA': X_online
+        'Batch_KSDR': X_batch,
+        'Online_KSDR': X_online
     }, X, Y)
 
     return results, {'batch_kspca': batch_kspca, 'online_kspca': online_kspca}
@@ -1208,7 +1208,7 @@ def benchmark_suite(include_kin8nm: bool = True, subset_kin8nm: int = 5000, kern
                 Phi_online = online.rff_x.transform(X)
                 Z_online = (Phi_online - online.mean_x) @ online.U
                 # Batch baseline
-                batch = BatchKSPCA(
+                batch = BatchKSDR(
                     d_x=X.shape[1], d_y=Y.shape[1], k=8,
                     D_x=Dx_id, D_y=Dy_id,
                     sigma_x=sigma_x_b, sigma_y=sigma_y_b,
@@ -1218,7 +1218,7 @@ def benchmark_suite(include_kin8nm: bool = True, subset_kin8nm: int = 5000, kern
                 batch.fit(X, Y)
                 Phi_batch = batch.rff_x.transform(X)
                 if batch.U is None:
-                    raise RuntimeError("BatchKSPCA.U is None after fit in benchmark suite")
+                    raise RuntimeError("BatchKSDR.U is None after fit in benchmark suite")
                 if batch.mean_x is not None:
                     Z_batch = (Phi_batch - batch.mean_x) @ batch.U
                 else:
